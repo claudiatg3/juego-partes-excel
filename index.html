@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego: Partes de Microsoft Excel 2013</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTML2Canvas para capturar pantalla y guardar como imagen -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        /* Estilos base y de interacción */
+        body {
+            background-color: #f0fdf4; /* Fondo verde muy claro temático */
+            touch-action: manipulation;
+        }
+
+        /* Palabras en verde por defecto */
+        .word-item {
+            color: #16a34a; /* Verde intenso */
+            font-weight: 700;
+            cursor: grab;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+        
+        .word-item:active {
+            cursor: grabbing;
+        }
+
+        .word-item.selected {
+            box-shadow: 0 0 0 4px #86efac;
+            transform: scale(1.05);
+            background-color: #f0fdf4;
+        }
+
+        /* Palabra tachada en rojo una vez descubierta */
+        .word-item.used {
+            color: #ef4444 !important; /* Rojo */
+            text-decoration: line-through;
+            text-decoration-color: #ef4444;
+            text-decoration-thickness: 3px;
+            cursor: not-allowed;
+            opacity: 0.6;
+            transform: scale(1);
+            background-color: #f3f4f6;
+            border-color: #d1d5db;
+        }
+
+        /* Zonas de Caída (Dropzones) */
+        .dropzone {
+            border: 2px dashed #9ca3af;
+            background-color: rgba(255, 255, 255, 0.7);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            min-height: 2rem;
+            cursor: pointer;
+            font-size: 0.75rem;
+            position: relative;
+            z-index: 10;
+        }
+
+        .dropzone.hover {
+            background-color: #dcfce7;
+            border-color: #16a34a;
+        }
+
+        .dropzone.filled {
+            border-style: solid;
+            border-width: 2px;
+            border-color: #15803d;
+            background-color: #bbf7d0;
+            color: #166534;
+            font-weight: bold;
+            cursor: default;
+            font-size: 0.75rem;
+            line-height: 1.1;
+            padding: 2px;
+        }
+
+        .dropzone.error {
+            animation: shake 0.4s ease-in-out;
+            background-color: #fee2e2;
+            border-color: #ef4444;
+        }
+
+        .dropzone-dark {
+            border-color: rgba(255,255,255,0.6);
+            background-color: rgba(0,0,0,0.1);
+        }
+
+        .dropzone-dark.hover {
+            background-color: rgba(255,255,255,0.2);
+            border-color: #ffffff;
+        }
+
+        .dropzone-dark.filled {
+            background-color: #ffffff;
+            color: #166534;
+            border-color: #ffffff;
+        }
+
+        .dropzone span {
+            color: #9ca3af;
+        }
+        
+        .dropzone.filled span {
+            color: inherit;
+        }
+        
+        .dropzone-dark span {
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .dropzone-dark.filled span {
+            color: #166534;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+        }
+
+        /* Estilos específicos de la maqueta de Excel */
+        .excel-window {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .excel-green {
+            background-color: #217346; /* Verde oficial de Excel */
+        }
+        
+        .excel-cell-grid {
+            background-image: 
+                linear-gradient(to right, #d1d5db 1px, transparent 1px),
+                linear-gradient(to bottom, #d1d5db 1px, transparent 1px);
+            background-size: 60px 24px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center">
+
+    <!-- Modal de Inicio (Pedir Nombre) -->
+    <div id="start-modal" class="fixed inset-0 bg-green-900 bg-opacity-90 flex items-center justify-center z-50 p-4 transition-opacity">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-md w-full">
+            <div class="text-6xl mb-4">📊</div>
+            <h2 class="text-3xl font-extrabold text-green-800 mb-2">Evaluación de Excel</h2>
+            <p class="text-gray-600 mb-6">Identifica las partes de la pantalla. Tienes 5 minutos.</p>
+            
+            <div class="mb-6 text-left">
+                <label for="student-name" class="block text-sm font-bold text-gray-700 mb-2">Nombre del Alumno:</label>
+                <input type="text" id="student-name" placeholder="Ej. Juan Pérez" class="w-full px-4 py-3 rounded-xl border-2 border-gray-300 focus:border-green-500 focus:ring focus:ring-green-200 text-lg transition-colors outline-none" required>
+                <p id="name-error" class="text-red-500 text-sm mt-1 hidden">Por favor ingresa tu nombre para continuar.</p>
+            </div>
+            
+            <button onclick="startGameAction()" class="w-full bg-green-600 text-white px-6 py-3 rounded-xl font-bold text-lg hover:bg-green-700 transition shadow-lg hover:shadow-xl">
+                Comenzar Prueba
+            </button>
+        </div>
+    </div>
+
+    <!-- ÁREA DE CAPTURA (Todo lo que está dentro se guardará como imagen) -->
+    <div id="capture-area" class="w-full flex flex-col items-center py-8 px-4 bg-[#f0fdf4] min-h-screen">
+        
+        <!-- Encabezado, Información del Alumno y Temporizador -->
+        <header class="w-full max-w-6xl flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+            <div class="flex-grow">
+                <h1 class="text-3xl font-extrabold text-green-800 mb-2">Anatomía de Excel 2013</h1>
+                <p class="text-green-700 font-medium mb-1">Arrastra las palabras (o tócalas) hacia su ubicación correcta.</p>
+                <div class="flex flex-col sm:flex-row gap-4 mt-3">
+                    <div class="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold border border-green-300">
+                        👨‍🎓 Alumno: <span id="display-student-name">...</span>
+                    </div>
+                    <div id="display-date-container" class="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg font-bold border border-blue-300 hidden">
+                        🕒 <span id="display-date"></span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white px-6 py-3 rounded-2xl shadow-md border-2 border-green-200 text-center shrink-0">
+                <span class="block text-sm text-green-600 font-bold uppercase tracking-wider mb-1">Tiempo Restante</span>
+                <div id="timer" class="text-4xl font-mono font-bold text-gray-800">05:00</div>
+            </div>
+        </header>
+
+        <!-- Contenedor Principal del Juego -->
+        <main class="w-full max-w-6xl flex flex-col lg:flex-row gap-6">
+            
+            <!-- Banco de Palabras -->
+            <aside class="w-full lg:w-1/3 bg-white p-5 rounded-2xl shadow-md border border-gray-200 h-max">
+                <h2 class="text-xl font-bold text-gray-700 mb-4 border-b pb-2">Conceptos (Nivel Medio)</h2>
+                <div id="word-bank" class="flex flex-wrap gap-2">
+                    <!-- Las palabras se generarán dinámicamente con JS -->
+                </div>
+                <div class="mt-6 p-4 bg-green-50 text-green-800 text-sm rounded-lg border border-green-200">
+                    <strong>💡 Tip:</strong> En dispositivos móviles, puedes tocar la palabra verde y luego tocar el recuadro gris punteado.
+                </div>
+            </aside>
+
+            <!-- Wireframe de Excel (Zona de Caída) -->
+            <section class="w-full lg:w-2/3">
+                <div class="excel-window w-full border border-gray-400 bg-white flex flex-col rounded overflow-hidden">
+                    
+                    <!-- 1. Barra de Título (Header Excel) -->
+                    <div class="excel-green text-white h-10 flex items-center justify-between px-2">
+                        <div class="flex items-center gap-2 w-1/3">
+                            <div class="w-4 h-4 bg-white opacity-20 rounded-sm"></div>
+                            <!-- Dropzone: Acceso Rápido -->
+                            <div class="dropzone dropzone-dark w-28 h-6 rounded-sm" data-target="acceso_rapido">
+                                <span>?</span>
+                            </div>
+                        </div>
+                        <!-- Dropzone: Barra de Título -->
+                        <div class="flex justify-center w-1/3">
+                            <div class="dropzone dropzone-dark w-32 h-6 rounded-sm" data-target="barra_titulo">
+                                <span>?</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-1 w-1/3 justify-end items-center">
+                            <!-- Dropzone: Botones de Control -->
+                            <div class="dropzone dropzone-dark w-32 h-6 rounded-sm" data-target="botones_control">
+                                <span>?</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Cinta de Opciones (Ribbon) -->
+                    <div class="bg-gray-100 h-24 border-b border-gray-300 flex flex-col pt-1">
+                        <div class="flex gap-4 px-4 text-xs text-green-700 mb-2 font-medium">
+                            <span>ARCHIVO</span> <span class="text-gray-600 border-b-2 border-green-600 pb-1">INICIO</span> <span>INSERTAR</span> <span>DISEÑO</span>
+                        </div>
+                        <div class="flex-grow flex items-center justify-center p-2">
+                            <!-- Dropzone: Cinta de opciones -->
+                            <div class="dropzone w-64 h-12 rounded" data-target="cinta_opciones">
+                                <span>?</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Barra de Fórmulas Row -->
+                    <div class="bg-white h-10 border-b border-gray-300 flex items-center px-2 gap-2">
+                        <!-- Dropzone: Cuadro de Nombres -->
+                        <div class="dropzone w-28 h-6 rounded" data-target="cuadro_nombres">
+                            <span>?</span>
+                        </div>
+                        
+                        <div class="text-gray-400 font-serif italic text-sm font-bold flex items-center px-1">
+                            <span class="mr-1 text-green-600">✓</span> fx
+                        </div>
+                        
+                        <!-- Dropzone: Barra de Fórmulas -->
+                        <div class="dropzone flex-grow h-6 rounded" data-target="barra_formulas">
+                            <span>?</span>
+                        </div>
+                    </div>
+
+                    <!-- 4. Área de Trabajo (Grid) -->
+                    <div class="flex flex-1 h-64 bg-white relative">
+                        <!-- Esquina superior izquierda -->
+                        <div class="w-10 bg-gray-200 border-r border-b border-gray-400 shrink-0"></div>
+                        
+                        <!-- Encabezados de Columna -->
+                        <div class="flex-grow bg-gray-200 border-b border-gray-400 flex items-center justify-center relative overflow-hidden">
+                            <div class="absolute inset-0 flex">
+                                <div class="w-[60px] border-r border-gray-300 flex items-center justify-center text-xs text-gray-500">A</div>
+                                <div class="w-[60px] border-r border-gray-300 flex items-center justify-center text-xs text-gray-500 bg-gray-300">B</div>
+                                <div class="w-[60px] border-r border-gray-300 flex items-center justify-center text-xs text-gray-500">C</div>
+                                <div class="w-[60px] border-r border-gray-300 flex items-center justify-center text-xs text-gray-500">D</div>
+                            </div>
+                            <!-- Dropzone: Encabezado de Columna -->
+                            <div class="dropzone w-40 h-5 bg-white opacity-90 rounded z-10" data-target="encabezado_columna">
+                                <span>?</span>
+                            </div>
+                        </div>
+
+                        <!-- Espacio superior derecho para alinear con barra vertical -->
+                        <div class="w-6 bg-gray-100 border-b border-gray-400 shrink-0"></div>
+                    </div>
+
+                    <div class="flex h-48 bg-white relative">
+                        <!-- Encabezados de Fila -->
+                        <div class="w-10 bg-gray-200 border-r border-gray-400 flex flex-col items-center justify-center relative shrink-0">
+                            <div class="absolute top-0 w-full flex flex-col">
+                                <div class="h-[24px] border-b border-gray-300 flex items-center justify-center text-xs text-gray-500">1</div>
+                                <div class="h-[24px] border-b border-gray-300 flex items-center justify-center text-xs text-gray-500">2</div>
+                                <div class="h-[24px] border-b border-gray-300 flex items-center justify-center text-xs text-gray-500 bg-gray-300">3</div>
+                                <div class="h-[24px] border-b border-gray-300 flex items-center justify-center text-xs text-gray-500">4</div>
+                            </div>
+                            <!-- Dropzone: Encabezado de Fila -->
+                            <div class="dropzone w-8 h-32 bg-white opacity-90 rounded z-10 p-0" data-target="encabezado_fila">
+                                <span style="writing-mode: vertical-rl; transform: rotate(180deg);">?</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Celdas (Grid interactivo) -->
+                        <div class="flex-grow excel-cell-grid relative">
+                            <!-- Dropzone: Celda Activa -->
+                            <div class="absolute top-[48px] left-[60px] w-[60px] h-[24px] border-2 border-green-600 bg-green-50 z-10 flex items-center justify-center dropzone p-0" data-target="celda_activa" style="border-style: solid;">
+                                <span class="text-[10px]">?</span>
+                                <div class="absolute -bottom-1 -right-1 w-1.5 h-1.5 bg-green-600 border border-white"></div>
+                            </div>
+                        </div>
+
+                        <!-- Barra de desplazamiento vertical -->
+                        <div class="w-6 bg-gray-100 border-l border-gray-300 shrink-0 flex flex-col items-center justify-center relative">
+                            <div class="absolute top-0 w-full h-4 bg-gray-200 flex justify-center items-center text-[8px] text-gray-500 border-b border-gray-300">▲</div>
+                            <!-- Dropzone: Barra Desplazamiento -->
+                            <div class="dropzone w-4 h-32 bg-white rounded-sm z-10 p-0" data-target="barra_desplazamiento">
+                                <span style="writing-mode: vertical-rl; transform: rotate(180deg);">?</span>
+                            </div>
+                            <div class="absolute bottom-0 w-full h-4 bg-gray-200 flex justify-center items-center text-[8px] text-gray-500 border-t border-gray-300">▼</div>
+                        </div>
+                    </div>
+
+                    <!-- 5. Barra de Hojas (Tabs Row) -->
+                    <div class="bg-gray-100 h-8 border-t border-gray-300 flex items-center px-2 justify-between">
+                        <div class="flex items-center gap-1">
+                            <span class="text-gray-400 text-xs px-2">◀ ▶</span>
+                            <!-- Dropzone: Etiquetas de Hojas -->
+                            <div class="dropzone w-32 h-6 bg-white border-t-2 border-green-600 border-x border-gray-300 !border-dashed rounded-t-sm" data-target="etiquetas_hoja">
+                                <span>?</span>
+                            </div>
+                            <div class="px-3 text-xs text-gray-500">Hoja2</div>
+                            <div class="text-green-600 text-lg leading-none mb-1 ml-1">+</div>
+                        </div>
+                        
+                        <div class="flex-grow flex justify-end px-2">
+                            <!-- Espacio de barra de desplazamiento horizontal visual -->
+                            <div class="w-32 h-4 bg-gray-200 border border-gray-300 flex justify-between items-center rounded-sm">
+                                <span class="text-[8px] px-1 text-gray-500">◀</span>
+                                <div class="w-16 h-3 bg-white border border-gray-300 rounded-sm"></div>
+                                <span class="text-[8px] px-1 text-gray-500">▶</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 6. Barra de Estado (Status Bar) -->
+                    <div class="excel-green text-white h-7 flex items-center px-2 justify-between border-t border-green-700">
+                        <div class="flex items-center">
+                            <!-- Dropzone: Barra de Estado -->
+                            <div class="dropzone dropzone-dark w-28 h-5 rounded-sm p-0" data-target="barra_estado">
+                                <span>?</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                             <!-- Dropzone: Vistas de Página -->
+                             <div class="dropzone dropzone-dark w-28 h-5 rounded-sm p-0" data-target="vistas_pagina">
+                                 <span>?</span>
+                             </div>
+                             <!-- Dropzone: Zoom -->
+                             <div class="dropzone dropzone-dark w-24 h-5 rounded-sm p-0 flex items-center" data-target="zoom">
+                                 <span>?</span>
+                             </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal de Fin de Juego -->
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4 transition-opacity">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-md w-full transform scale-100 transition-transform">
+            <div id="modal-icon" class="text-6xl mb-4"></div>
+            <h2 id="modal-title" class="text-3xl font-bold text-gray-800 mb-2"></h2>
+            <p id="modal-msg" class="text-gray-600 mb-6 text-lg"></p>
+            
+            <div class="flex flex-col gap-3">
+                <button onclick="downloadResults()" class="w-full bg-blue-600 text-white px-6 py-3 rounded-xl font-bold text-lg hover:bg-blue-700 transition shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+                    <span>📷</span> Descargar Resultados
+                </button>
+                <button onclick="initGame()" class="w-full bg-gray-200 text-gray-800 px-6 py-3 rounded-xl font-bold text-lg hover:bg-gray-300 transition shadow">
+                    Jugar de Nuevo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Indicador de Carga (Capturando imagen) -->
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-white bg-opacity-90 flex flex-col items-center justify-center z-[60]">
+        <div class="w-16 h-16 border-4 border-green-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p class="text-xl font-bold text-green-800">Generando tu imagen...</p>
+    </div>
+
+    <script>
+        // --- CONFIGURACIÓN DEL JUEGO ---
+        const gameTime = 300; // 5 minutos en segundos
+        const parts = [
+            { id: 'barra_titulo', text: 'Barra de Título' },
+            { id: 'zoom', text: 'Zoom' },
+            { id: 'botones_control', text: 'Botones de Control' },
+            { id: 'barra_desplazamiento', text: 'Barras de Desplazamiento' },
+            { id: 'vistas_pagina', text: 'Vistas de Página' },
+            { id: 'barra_estado', text: 'Barra de Estado' },
+            { id: 'cinta_opciones', text: 'Cinta de Opciones' },
+            { id: 'cuadro_nombres', text: 'Cuadro de Nombres' },
+            { id: 'encabezado_fila', text: 'Encabezado de Fila' },
+            { id: 'encabezado_columna', text: 'Encabezado de Columna' },
+            { id: 'etiquetas_hoja', text: 'Etiquetas de Hoja' },
+            { id: 'acceso_rapido', text: 'Acceso Rápido' },
+            { id: 'barra_formulas', text: 'Barra de Fórmulas' },
+            { id: 'celda_activa', text: 'Celda Activa' }
+        ];
+
+        // --- VARIABLES DE ESTADO ---
+        let timerInterval;
+        let timeLeft;
+        let correctCount = 0;
+        let selectedWordId = null; 
+        let isGameActive = false;
+        let studentName = "";
+
+        // --- FUNCIONES DE UTILIDAD ---
+        // Algoritmo Fisher-Yates para una aleatorización perfecta en cada juego
+        function shuffleArray(array) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        // --- ELEMENTOS DEL DOM ---
+        const wordBankEl = document.getElementById('word-bank');
+        const timerEl = document.getElementById('timer');
+        const modal = document.getElementById('modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMsg = document.getElementById('modal-msg');
+        const modalIcon = document.getElementById('modal-icon');
+        const dropzones = document.querySelectorAll('.dropzone');
+        const dateContainer = document.getElementById('display-date-container');
+        const dateDisplay = document.getElementById('display-date');
+
+        // --- FLUJO DE INICIO ---
+        function startGameAction() {
+            const nameInput = document.getElementById('student-name').value.trim();
+            if(!nameInput) {
+                document.getElementById('name-error').classList.remove('hidden');
+                return;
+            }
+            document.getElementById('name-error').classList.add('hidden');
+            studentName = nameInput;
+            document.getElementById('display-student-name').textContent = studentName;
+            
+            // Ocultar modal de inicio e iniciar juego
+            document.getElementById('start-modal').classList.add('hidden');
+            initGame();
+        }
+
+        // --- INICIALIZACIÓN DEL JUEGO ---
+        function initGame() {
+            // Resetear variables
+            timeLeft = gameTime;
+            correctCount = 0;
+            selectedWordId = null;
+            isGameActive = true;
+            clearInterval(timerInterval);
+
+            // Ocultar modales y contenedor de fecha
+            modal.classList.add('hidden');
+            dateContainer.classList.add('hidden');
+
+            // Resetear zonas de caída
+            dropzones.forEach(zone => {
+                zone.classList.remove('filled', 'hover', 'error');
+                
+                if (zone.dataset.target === 'celda_activa') {
+                    zone.innerHTML = `<span class="text-[10px]">?</span><div class="absolute -bottom-1 -right-1 w-1.5 h-1.5 bg-green-600 border border-white"></div>`;
+                } else if (zone.dataset.target === 'encabezado_fila' || zone.dataset.target === 'barra_desplazamiento') {
+                    zone.innerHTML = `<span style="writing-mode: vertical-rl; transform: rotate(180deg);">?</span>`;
+                } else {
+                    zone.innerHTML = `<span>?</span>`;
+                }
+            });
+
+            // Generar palabras barajadas de forma aleatoria para cada juego nuevo
+            wordBankEl.innerHTML = '';
+            const shuffledParts = shuffleArray([...parts]);
+            
+            shuffledParts.forEach(part => {
+                const wordEl = document.createElement('div');
+                wordEl.classList.add('word-item', 'bg-white', 'px-3', 'py-2', 'rounded-lg', 'border-2', 'border-green-300', 'shadow-sm', 'text-sm');
+                wordEl.textContent = part.text;
+                wordEl.id = part.id;
+                wordEl.draggable = true;
+
+                // Eventos de Arrastrar (Desktop)
+                wordEl.addEventListener('dragstart', handleDragStart);
+                
+                // Evento de Click (Móvil / Híbrido)
+                wordEl.addEventListener('click', () => handleWordClick(wordEl));
+
+                wordBankEl.appendChild(wordEl);
+            });
+
+            // Iniciar temporizador
+            updateTimerDisplay();
+            startTimer();
+        }
+
+        // --- TEMPORIZADOR ---
+        function startTimer() {
+            timerInterval = setInterval(() => {
+                if (!isGameActive) return;
+                
+                timeLeft--;
+                updateTimerDisplay();
+
+                // Cambiar color a rojo si queda menos de 1 minuto
+                if (timeLeft <= 60) {
+                    timerEl.classList.add('text-red-600');
+                    timerEl.classList.remove('text-gray-800');
+                } else {
+                    timerEl.classList.remove('text-red-600');
+                    timerEl.classList.add('text-gray-800');
+                }
+
+                if (timeLeft <= 0) {
+                    endGame(false);
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            timerEl.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // --- LÓGICA DE INTERACCIÓN ---
+        function handleDragStart(e) {
+            if (!isGameActive || e.target.classList.contains('used')) {
+                e.preventDefault();
+                return;
+            }
+            e.dataTransfer.setData('text/plain', e.target.id);
+            handleWordClick(e.target);
+        }
+
+        function handleWordClick(wordEl) {
+            if (!isGameActive || wordEl.classList.contains('used')) return;
+
+            document.querySelectorAll('.word-item').forEach(el => {
+                el.classList.remove('selected');
+            });
+
+            selectedWordId = wordEl.id;
+            wordEl.classList.add('selected');
+        }
+
+        function setupDropzones() {
+            dropzones.forEach(zone => {
+                zone.addEventListener('dragover', e => {
+                    e.preventDefault();
+                    if (isGameActive && !zone.classList.contains('filled')) {
+                        zone.classList.add('hover');
+                    }
+                });
+
+                zone.addEventListener('dragleave', () => {
+                    zone.classList.remove('hover');
+                });
+
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('hover');
+                    const draggedId = e.dataTransfer.getData('text/plain');
+                    processPlacement(zone, draggedId);
+                });
+
+                zone.addEventListener('click', () => {
+                    if (isGameActive && selectedWordId) {
+                        processPlacement(zone, selectedWordId);
+                    }
+                });
+            });
+        }
+
+        function processPlacement(zone, idEntrante) {
+            if (!isGameActive || zone.classList.contains('filled') || !idEntrante) return;
+
+            const targetId = zone.dataset.target;
+            
+            if (idEntrante === targetId) {
+                // Correcto
+                const partObj = parts.find(p => p.id === idEntrante);
+                
+                zone.classList.add('filled');
+                
+                if (targetId === 'encabezado_fila' || targetId === 'barra_desplazamiento') {
+                    zone.innerHTML = `<span style="writing-mode: vertical-rl; transform: rotate(180deg);">${partObj.text}</span>`;
+                } else if (targetId === 'celda_activa') {
+                    zone.innerHTML = `<span>${partObj.text}</span><div class="absolute -bottom-1 -right-1 w-1.5 h-1.5 bg-green-600 border border-white"></div>`;
+                } else {
+                    zone.innerHTML = `<span>${partObj.text}</span>`;
+                }
+                
+                const wordEl = document.getElementById(idEntrante);
+                wordEl.classList.remove('selected');
+                wordEl.classList.add('used');
+                wordEl.draggable = false;
+                
+                selectedWordId = null;
+                correctCount++;
+
+                if (correctCount === parts.length) {
+                    endGame(true);
+                }
+            } else {
+                // Incorrecto
+                zone.classList.add('error');
+                setTimeout(() => {
+                    zone.classList.remove('error');
+                }, 400);
+            }
+        }
+
+        // --- FIN DEL JUEGO Y CAPTURA ---
+        function endGame(isWin) {
+            isGameActive = false;
+            clearInterval(timerInterval);
+            
+            // Establecer fecha y hora
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
+            const timeStr = now.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+            dateDisplay.textContent = `${dateStr} a las ${timeStr}`;
+            dateContainer.classList.remove('hidden'); // Mostrar para que salga en la foto
+            
+            modal.classList.remove('hidden');
+            
+            if (isWin) {
+                const timeTaken = gameTime - timeLeft;
+                const m = Math.floor(timeTaken / 60);
+                const s = timeTaken % 60;
+                
+                modalIcon.textContent = "📊";
+                modalTitle.textContent = "¡Reto Superado!";
+                modalTitle.classList.add('text-green-600');
+                modalTitle.classList.remove('text-red-600');
+                modalMsg.innerHTML = `¡Felicidades, ${studentName}! Conoces la interfaz de Excel.<br><br><strong>Tiempo usado:</strong> ${m}m ${s}s.`;
+            } else {
+                modalIcon.textContent = "⏰";
+                modalTitle.textContent = "¡Tiempo Agotado!";
+                modalTitle.classList.add('text-red-600');
+                modalTitle.classList.remove('text-green-600');
+                modalMsg.innerHTML = `Se acabaron los 5 minutos, ${studentName}.<br>Aún puedes guardar tu progreso actual.`;
+            }
+        }
+
+        function downloadResults() {
+            // Ocultar modal para tomar la foto limpia
+            modal.classList.add('hidden');
+            const loading = document.getElementById('loading-overlay');
+            loading.classList.remove('hidden');
+
+            const captureArea = document.getElementById('capture-area');
+
+            // Dar un pequeño delay para que la UI se actualice
+            setTimeout(() => {
+                html2canvas(captureArea, {
+                    backgroundColor: "#f0fdf4", // Asegurar color de fondo
+                    scale: 2 // Mejor calidad de imagen
+                }).then(canvas => {
+                    const link = document.createElement('a');
+                    const safeName = studentName.replace(/\s+/g, '_');
+                    link.download = `Resultados_Excel_${safeName}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                    
+                    // Restaurar interfaz
+                    loading.classList.add('hidden');
+                    modal.classList.remove('hidden');
+                }).catch(err => {
+                    console.error("Error al generar la imagen: ", err);
+                    alert("Hubo un problema al generar la imagen.");
+                    loading.classList.add('hidden');
+                    modal.classList.remove('hidden');
+                });
+            }, 300);
+        }
+
+        // Iniciar el juego y preparar eventos al cargar la página
+        window.onload = () => {
+            setupDropzones(); // Se ejecuta solo una vez para evitar duplicar eventos
+            // El juego ya no se auto-inicia aquí. Se espera al modal de inicio.
+        };
+    </script>
+</body>
+</html>
